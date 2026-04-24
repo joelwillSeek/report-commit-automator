@@ -1,9 +1,12 @@
 {
   "name": "report-commit-automator",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "ts-node index.ts",
+    "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -15,5 +18,10 @@
     "commander": "^14.0.3",
     "dotenv": "^17.4.2",
     "simple-git": "^3.36.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
   }
 }
