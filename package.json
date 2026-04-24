@@ -5,7 +5,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "ts-node index.ts",
+    "start": "ts-node index.ts -o report.txt",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

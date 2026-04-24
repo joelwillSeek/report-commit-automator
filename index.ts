@@ -4,6 +4,7 @@ import { simpleGit, type SimpleGit } from "simple-git";
 import * as dotenv from "dotenv";
 import { program } from "commander";
 import * as path from "path";
+import * as fs from "fs";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -48,21 +49,20 @@ async function getCommits(repoPath: string): Promise<CommitInfo[] | null> {
 /**
  * Uses Gemini to generate a summarized report from the provided commit messages.
  * @param {RepoCommits} repoCommits
+ * @param {string} format
  * @returns {Promise<string>}
  */
-async function generateReport(repoCommits: RepoCommits): Promise<string> {
+async function generateReport(
+  repoCommits: RepoCommits,
+  format: string = "html",
+): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is missing in environment variables.");
   }
 
-  const ai = new GoogleGenAI({});
-  // const model = ai.GenerativeModel({ model: "gemini-3-flash-preview" });
-
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: "Explain how AI works in a few words",
-  });
+  const ai = new GoogleGenAI({ apiKey });
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
   const now = new Date();
   const weekAgo = new Date();
@@ -71,12 +71,22 @@ async function generateReport(repoCommits: RepoCommits): Promise<string> {
   let prompt = `You are an assistant helping a developer create a weekly progress report for the period of ${weekAgo.toDateString()} to ${now.toDateString()}.\n`;
   prompt +=
     "I will provide you with commit messages from the last 7 days across several local repository folders, including dates and authors. Your task is to organize these into a professional report.\n\n";
-  prompt += "Please structure the report as follows:\n";
-  prompt += "1. A high-level Executive Summary of the week's progress.\n";
-  prompt +=
-    "2. A detailed breakdown for each repository folder, summarizing the key features, bug fixes, or improvements made. Organize these chronologically if possible.\n";
-  prompt += "3. Mention significant contributions or themes observed.\n";
-  prompt += "4. Keep the tone professional and concise.\n\n";
+
+  if (format === "html") {
+    prompt +=
+      "IMPORTANT: Please generate the report in clean, professional HTML format suitable for an email body. Use standard HTML tags. Avoid overly 'fancy' CSS (like shadows or complex boxes) unless it makes the report significantly more readable. Focus on clear typography and clean spacing.\n\n";
+  } else if (format === "text") {
+    prompt +=
+      "IMPORTANT: Please generate a clean, professional PLAIN TEXT report (no markdown, no HTML). Use headers in ALL CAPS, use dashes (-) for bullet points, and use double line breaks between sections to ensure it is very readable in a simple email client.\n\n";
+  } else {
+    prompt += "Please structure the report as follows:\n";
+    prompt += "1. A high-level Executive Summary of the week's progress.\n";
+    prompt +=
+      "2. A detailed breakdown for each repository folder, summarizing the key features, bug fixes, or improvements made. Organize these chronologically if possible.\n";
+    prompt += "3. Mention significant contributions or themes observed.\n";
+    prompt += "4. Keep the tone professional and concise.\n\n";
+  }
+
   prompt += "Here are the commits grouped by folder name:\n\n";
 
   for (const [repo, commits] of Object.entries(repoCommits)) {
@@ -90,10 +100,10 @@ async function generateReport(repoCommits: RepoCommits): Promise<string> {
   prompt += "Generated Report:";
 
   const result = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelName,
     contents: prompt,
   });
-  return result.response.text();
+  return result.text || "Could not get result";
 }
 
 program
@@ -102,8 +112,10 @@ program
     "Generate a weekly report from git commits across multiple local folders",
   )
   .version("1.0.0")
+  .option("-f, --format <type>", "Output format (html, markdown, or text)", "text")
+  .option("-o, --output <path>", "Output file path")
   .argument("[paths...]", "list of paths to local git repository folders")
-  .action(async (cliPaths: string[]) => {
+  .action(async (cliPaths: string[], options: { format: string; output?: string }) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       console.error("Error: GEMINI_API_KEY is not set in .env file.");
@@ -152,14 +164,25 @@ program
       return;
     }
 
-    console.log("\nGenerating professional report with Gemini...");
+    console.log(
+      `\nGenerating professional report in ${options.format.toUpperCase()} format with Gemini...`,
+    );
     try {
-      const report = await generateReport(repoCommits);
-      console.log("\n==========================================");
-      console.log("             WEEKLY REPORT               ");
-      console.log("==========================================\n");
-      console.log(report);
-      console.log("\n==========================================\n");
+      const report = await generateReport(repoCommits, options.format);
+      
+      if (options.output) {
+        const outputPath = path.resolve(options.output);
+        fs.writeFileSync(outputPath, report);
+        console.log(`\n✅ Report successfully saved to: ${outputPath}`);
+      } else {
+        console.log("\n==========================================");
+        console.log(
+          `             WEEKLY REPORT (${options.format.toUpperCase()})               `,
+        );
+        console.log("==========================================\n");
+        console.log(report);
+        console.log("\n==========================================\n");
+      }
     } catch (error: any) {
       console.error("\nError generating report:", error.message);
     }
