@@ -1,5 +1,6 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { simpleGit, SimpleGit } from "simple-git";
+import { GoogleGenAI } from "@google/genai";
+
+import { simpleGit, type SimpleGit } from "simple-git";
 import * as dotenv from "dotenv";
 import { program } from "commander";
 import * as path from "path";
@@ -55,9 +56,13 @@ async function generateReport(repoCommits: RepoCommits): Promise<string> {
     throw new Error("GEMINI_API_KEY is missing in environment variables.");
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-  const model = genAI.getGenerativeModel({ model: modelName });
+  const ai = new GoogleGenAI({});
+  // const model = ai.GenerativeModel({ model: "gemini-3-flash-preview" });
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: "Explain how AI works in a few words",
+  });
 
   const now = new Date();
   const weekAgo = new Date();
@@ -84,7 +89,10 @@ async function generateReport(repoCommits: RepoCommits): Promise<string> {
 
   prompt += "Generated Report:";
 
-  const result = await model.generateContent(prompt);
+  const result = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: prompt,
+  });
   return result.response.text();
 }
 
@@ -94,11 +102,26 @@ program
     "Generate a weekly report from git commits across multiple local folders",
   )
   .version("1.0.0")
-  .argument("<paths...>", "list of paths to local git repository folders")
-  .action(async (paths: string[]) => {
-    if (!process.env.GEMINI_API_KEY) {
+  .argument("[paths...]", "list of paths to local git repository folders")
+  .action(async (cliPaths: string[]) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
       console.error("Error: GEMINI_API_KEY is not set in .env file.");
       console.log("Please create a .env file with your GEMINI_API_KEY.");
+      process.exit(1);
+    }
+
+    // Get paths from CLI or from environment variable REPO_PATHS (comma-separated)
+    let paths = cliPaths;
+    if (paths.length === 0 && process.env.REPO_PATHS) {
+      paths = process.env.REPO_PATHS.split(",").map((p) => p.trim());
+    }
+
+    if (paths.length === 0) {
+      console.error("Error: No repository paths provided.");
+      console.log(
+        "Provide paths as arguments or set REPO_PATHS in your .env file.",
+      );
       process.exit(1);
     }
 
