@@ -52,10 +52,7 @@ async function getCommits(repoPath: string): Promise<CommitInfo[] | null> {
  * @param {string} format
  * @returns {Promise<string>}
  */
-async function generateReport(
-  repoCommits: RepoCommits,
-  format: string = "html",
-): Promise<string> {
+async function generateReport(repoCommits: RepoCommits): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is missing in environment variables.");
@@ -70,34 +67,41 @@ async function generateReport(
 
   let prompt = `You are an assistant helping a developer create a weekly progress report for the period of ${weekAgo.toDateString()} to ${now.toDateString()}.\n`;
   prompt +=
-    "I will provide you with commit messages from the last 7 days across several local repository folders, including dates and authors. Your task is to organize these into a professional report.\n\n";
+    "I will provide you with commit messages from the last 7 days across several local repository folders.\n\n";
 
-  if (format === "html") {
-    prompt +=
-      "IMPORTANT: Please generate the report in clean, professional HTML format suitable for an email body. Use standard HTML tags. Avoid overly 'fancy' CSS (like shadows or complex boxes) unless it makes the report significantly more readable. Focus on clear typography and clean spacing.\n\n";
-  } else if (format === "text") {
-    prompt +=
-      "IMPORTANT: Please generate a clean, professional PLAIN TEXT report (no markdown, no HTML). Use headers in ALL CAPS, use dashes (-) for bullet points, and use double line breaks between sections to ensure it is very readable in a simple email client.\n\n";
-  } else {
-    prompt += "Please structure the report as follows:\n";
-    prompt += "1. A high-level Executive Summary of the week's progress.\n";
-    prompt +=
-      "2. A detailed breakdown for each repository folder, summarizing the key features, bug fixes, or improvements made. Organize these chronologically if possible.\n";
-    prompt += "3. Mention significant contributions or themes observed.\n";
-    prompt += "4. Keep the tone professional and concise.\n\n";
-  }
+  prompt += `For EACH folder/project, output a block using EXACTLY this plain-text format (no markdown, no HTML, no bullet symbols except dashes):
 
-  prompt += "Here are the commits grouped by folder name:\n\n";
+Project Name      : <folder name>
+Completed Last Week:
+  - <summarize what was done based on commits, one item per line>
+Currently Working On:
+  - <infer what is actively being worked on from the most recent commits>
+Plan for Next Week:
+  -
+  -
+  -
+Bottlenecks / Risks:
+  - <note any risks, blockers, or concerns visible from the commits, or "None identified" if none>
+
+---
+
+Rules:
+- "Plan for Next Week" must ALWAYS have exactly 3 blank dash lines (  -) and nothing else. Never fill them in.
+- Keep language professional and concise.
+- Separate each project block with a line of dashes (---).
+- Do NOT add any intro text, outro text, or extra commentary outside the blocks.
+
+Here are the commits grouped by folder name:\n\n`;
 
   for (const [repo, commits] of Object.entries(repoCommits)) {
-    prompt += `### Folder: ${repo}\n`;
+    prompt += `Folder: ${repo}\n`;
     prompt += commits
       .map((c) => `- [${c.date}] (${c.author}): ${c.message}`)
       .join("\n");
     prompt += "\n\n";
   }
 
-  prompt += "Generated Report:";
+  prompt += "Generate the report now:";
 
   const result = await ai.models.generateContent({
     model: modelName,
@@ -112,10 +116,9 @@ program
     "Generate a weekly report from git commits across multiple local folders",
   )
   .version("1.0.0")
-  .option("-f, --format <type>", "Output format (html, markdown, or text)", "text")
   .option("-o, --output <path>", "Output file path")
   .argument("[paths...]", "list of paths to local git repository folders")
-  .action(async (cliPaths: string[], options: { format: string; output?: string }) => {
+  .action(async (cliPaths: string[], options: { output?: string }) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       console.error("Error: GEMINI_API_KEY is not set in .env file.");
@@ -164,24 +167,18 @@ program
       return;
     }
 
-    console.log(
-      `\nGenerating professional report in ${options.format.toUpperCase()} format with Gemini...`,
-    );
+    console.log("\nGenerating weekly report with Gemini...");
     try {
-      const report = await generateReport(repoCommits, options.format);
+      const report = await generateReport(repoCommits);
       
       if (options.output) {
         const outputPath = path.resolve(options.output);
         fs.writeFileSync(outputPath, report);
         console.log(`\n✅ Report successfully saved to: ${outputPath}`);
       } else {
-        console.log("\n==========================================");
-        console.log(
-          `             WEEKLY REPORT (${options.format.toUpperCase()})               `,
-        );
-        console.log("==========================================\n");
+        console.log("\n========== WEEKLY REPORT ==========");
         console.log(report);
-        console.log("\n==========================================\n");
+        console.log("\n==================================\n");
       }
     } catch (error: any) {
       console.error("\nError generating report:", error.message);
