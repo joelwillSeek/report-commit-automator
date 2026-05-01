@@ -33,7 +33,8 @@ async function getCommits(repoPath: string): Promise<CommitInfo[] | null> {
     }
 
     // Get logs since 7 days ago
-    const log = await git.log({ "--since": "7 days ago" });
+    const log = await git.log({ "--since": "7 days ago", "--all": null });
+
     return log.all.map((commit) => ({
       message: commit.message,
       date: commit.date,
