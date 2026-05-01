@@ -1,5 +1,4 @@
 import { GoogleGenAI } from "@google/genai";
-
 import { simpleGit, type SimpleGit } from "simple-git";
 import * as dotenv from "dotenv";
 import { program } from "commander";
@@ -170,7 +169,7 @@ program
     console.log("\nGenerating weekly report with Gemini...");
     try {
       const report = await generateReport(repoCommits);
-      
+
       if (options.output) {
         const outputPath = path.resolve(options.output);
         fs.writeFileSync(outputPath, report);
